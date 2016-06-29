@@ -1,0 +1,11 @@
+GeneratorModel for yakindu::cpp {
+
+	statechart MainMenu {
+
+		feature Outlet {
+			targetProject = "Laundry"
+			targetFolder = "sct-src-gen"
+			libraryTargetFolder = "sct-src"
+		}
+	}
+}
