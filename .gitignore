@@ -97,3 +97,4 @@ local.properties
 # Statechart Tools Generated Code
 sct-src/
 sct-src-gen/
+telegram.h
