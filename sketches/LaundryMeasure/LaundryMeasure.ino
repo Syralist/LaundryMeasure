@@ -18,8 +18,8 @@
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
-#include <WiFiClientSecure.h>
-#include <UniversalTelegramBot.h>
+/* #include <WiFiClientSecure.h> */
+/* #include <UniversalTelegramBot.h> */
 
 #define MAX_BUFFER_SIZE 2500
 
@@ -27,8 +27,8 @@
 #include "telegram.h"
 #endif
 
-WiFiClientSecure client;
-UniversalTelegramBot bot(_BOT_ID, client);
+/* WiFiClientSecure client; */
+/* UniversalTelegramBot bot(_BOT_ID, client); */
 
 int Bot_mtbs = 1000; //mean time between scan messages
 long Bot_lasttime;   //last time messages' scan has been done
@@ -141,25 +141,25 @@ void setup() {
   timeClient.begin();
 
 
-  /* String telegram = "https://api.telegram.org/" + String(_BOT_ID) + "/sendMessage?chat_id=" + _CHAT_ID + "&text=" + timeClient.getFormattedTime(); */
-  /* Serial.println(telegram); */
-  /* HTTPClient http; */
-  /* http.begin(telegram); */
-  /* int httpCode = http.GET(); */
-  /* // httpCode will be negative on error */
-  /* if(httpCode > 0) { */
-  /*     // HTTP header has been send and Server response header has been handled */
-  /*     Serial.printf("[HTTP] GET... code: %d\n", httpCode); */
+  String telegram = "http://steffiundthomas.net/telegramrelais.php?bot_token=" + String(_BOT_ID) + "&chat_id=" + _CHAT_ID + "&body=test" + timeClient.getFormattedTime();
+  Serial.println(telegram);
+  HTTPClient http;
+  http.begin(telegram);
+  int httpCode = http.GET();
+  // httpCode will be negative on error
+  if(httpCode > 0) {
+      // HTTP header has been send and Server response header has been handled
+      Serial.printf("[HTTP] GET... code: %d\n", httpCode);
 
-  /*     // file found at server */
-  /*     if(httpCode == HTTP_CODE_OK) { */
-  /*         String payload = http.getString(); */
-  /*         Serial.println(payload); */
-  /*     } */
-  /* } else { */
-  /*     Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str()); */
-  /* } */
-  /* http.end(); */
+      // file found at server
+      if(httpCode == HTTP_CODE_OK) {
+          String payload = http.getString();
+          Serial.println(payload);
+      }
+  } else {
+      Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+  }
+  http.end();
 
   ads.begin();
 }
@@ -180,17 +180,17 @@ void loop() {
         timeClient.setTimeOffset(3600);
     }
   }
-  if (millis() > Bot_lasttime + Bot_mtbs)  {
-      int numNewMessages = bot.getUpdates(bot.last_message_recived + 1);
-      while(numNewMessages) {
-          Serial.println("got response");
-          for(int i=0; i<numNewMessages; i++) {
-              bot.sendMessage(bot.messages[i].chat_id, bot.messages[i].text, "");
-          }
-          numNewMessages = bot.getUpdates(bot.last_message_recived + 1);
-      }
-      Bot_lasttime = millis();
-  }
+  /* if (millis() > Bot_lasttime + Bot_mtbs)  { */
+  /*     int numNewMessages = bot.getUpdates(bot.last_message_recived + 1); */
+  /*     while(numNewMessages) { */
+  /*         Serial.println("got response"); */
+  /*         for(int i=0; i<numNewMessages; i++) { */
+  /*             bot.sendMessage(bot.messages[i].chat_id, bot.messages[i].text, ""); */
+  /*         } */
+  /*         numNewMessages = bot.getUpdates(bot.last_message_recived + 1); */
+  /*     } */
+  /*     Bot_lasttime = millis(); */
+  /* } */
   if(triggeredJoystick && ((millis()-lastJoystick)>debounceInterval))
   {
       triggeredJoystick = false;
