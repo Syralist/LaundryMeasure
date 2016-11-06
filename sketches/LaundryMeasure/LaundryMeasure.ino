@@ -18,17 +18,12 @@
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
-/* #include <WiFiClientSecure.h> */
-/* #include <UniversalTelegramBot.h> */
 
 #define MAX_BUFFER_SIZE 2500
 
 #ifndef _BOT_ID
 #include "telegram.h"
 #endif
-
-/* WiFiClientSecure client; */
-/* UniversalTelegramBot bot(_BOT_ID, client); */
 
 int Bot_mtbs = 1000; //mean time between scan messages
 long Bot_lasttime;   //last time messages' scan has been done
@@ -57,6 +52,8 @@ unsigned int lastJoystick = 0;
 bool triggeredJoystick = false;
 
 bool WiFiConnected = false;
+bool NTPupdated = false;
+bool MessageSentBooted = false;
 
 // Initialize the OLED display using Wire library
 SSD1306  display(0x3c, D1, D2);
@@ -65,16 +62,17 @@ OLEDDisplayUi ui( &display );
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(ArialMT_Plain_10);
-    display->drawString(0, 0, String(timeClient.getFormattedTime()));
+    display->drawString(0, 0, timeClient.getFormattedTime());
+    display->drawString(display->getStringWidth(timeClient.getFormattedTime())+1, 0, WiFi.SSID());
 }
 
 void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
-  display->setFont(ArialMT_Plain_16);
-  display->setTextAlignment(TEXT_ALIGN_LEFT);
-  if(!WiFiConnected)
-      display->drawString(0, 20, "Connecting...");
-  else
-      display->drawString(0, 20, String(WiFi.SSID()));
+    display->setFont(ArialMT_Plain_16);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    if(!WiFiConnected)
+        display->drawString(0, 20, "Connecting...");
+    else
+        display->drawStringMaxWidth(0, 20, 128, String("Herzlich Willkommen!"));
 }
 
 void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
@@ -91,6 +89,63 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
     display->drawString(0 + x, 34 + y, "Arial 24");
 }
 
+String urlencode(String str)
+{
+    String encodedString="";
+    char c;
+    char code0;
+    char code1;
+    char code2;
+    for (int i =0; i < str.length(); i++){
+        c=str.charAt(i);
+        if (c == ' '){
+            encodedString+= '+';
+        } else if (isalnum(c)){
+            encodedString+=c;
+        } else{
+            code1=(c & 0xf)+'0';
+            if ((c & 0xf) >9){
+                code1=(c & 0xf) - 10 + 'A';
+            }
+            c=(c>>4)&0xf;
+            code0=c+'0';
+            if (c > 9){
+                code0=c - 10 + 'A';
+            }
+            code2='\0';
+            encodedString+='%';
+            encodedString+=code0;
+            encodedString+=code1;
+            //encodedString+=code2;
+        }
+        yield();
+    }
+    return encodedString;
+}
+
+void sendTelegram(String message)
+{
+    String telegram = "http://steffiundthomas.net/telegramrelais.php?bot_token=" + String(_BOT_ID) + "&chat_id=" + _CHAT_ID + "&body=" + urlencode(message);
+    Serial.println(telegram);
+    HTTPClient http;
+    http.begin(telegram);
+    int httpCode = http.GET();
+    // httpCode will be negative on error
+    if(httpCode > 0) {
+        // HTTP header has been send and Server response header has been handled
+        Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+
+        // file found at server
+        if(httpCode == HTTP_CODE_OK) {
+            String payload = http.getString();
+            Serial.println(payload);
+        }
+    } else {
+        Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+    }
+    http.end();
+}
+
 // This array keeps function pointers to all frames
 // frames are the single views that slide in
 FrameCallback frames[] = { drawFrame1, drawFrame2};
@@ -103,113 +158,85 @@ OverlayCallback overlays[] = { msOverlay };
 int overlaysCount = 1;
 
 void setup() {
-  Serial.begin(115200);
-  Serial.println();
-  Serial.println();
-  // put your setup code here, to run once:
+    Serial.begin(115200);
+    Serial.println();
+    Serial.println();
+    // put your setup code here, to run once:
 
-  // The ESP is capable of rendering 60fps in 80Mhz mode
-  // but that won't give you much time for anything else
-  // run it in 160Mhz mode or just set it to 30 fps
-  ui.setTargetFPS(60);
-  // Customize the active and inactive symbol
-  ui.setActiveSymbol(activeSymbol);
-  ui.setInactiveSymbol(inactiveSymbol);
-  // You can change this to
-  // TOP, LEFT, BOTTOM, RIGHT
-  ui.setIndicatorPosition(BOTTOM);
-  // Defines where the first frame is located in the bar.
-  ui.setIndicatorDirection(LEFT_RIGHT);
-  // You can change the transition that is used
-  // SLIDE_LEFT, SLIDE_RIGHT, SLIDE_UP, SLIDE_DOWN
-  ui.setFrameAnimation(SLIDE_LEFT);
-  // Add frames
-  ui.setFrames(frames, frameCount);
-  // Add overlays
-  ui.setOverlays(overlays, overlaysCount);
-  ui.setTimePerTransition(250);
-  ui.disableAutoTransition();
-  // Initialising the UI will init the display too.
-  ui.init();
-  display.flipScreenVertically();
-  int remainingTimeBudget = ui.update();
+    // The ESP is capable of rendering 60fps in 80Mhz mode
+    // but that won't give you much time for anything else
+    // run it in 160Mhz mode or just set it to 30 fps
+    ui.setTargetFPS(60);
+    // Customize the active and inactive symbol
+    ui.setActiveSymbol(activeSymbol);
+    ui.setInactiveSymbol(inactiveSymbol);
+    // You can change this to
+    // TOP, LEFT, BOTTOM, RIGHT
+    ui.setIndicatorPosition(BOTTOM);
+    // Defines where the first frame is located in the bar.
+    ui.setIndicatorDirection(LEFT_RIGHT);
+    // You can change the transition that is used
+    // SLIDE_LEFT, SLIDE_RIGHT, SLIDE_UP, SLIDE_DOWN
+    ui.setFrameAnimation(SLIDE_LEFT);
+    // Add frames
+    ui.setFrames(frames, frameCount);
+    // Add overlays
+    ui.setOverlays(overlays, overlaysCount);
+    ui.setTimePerTransition(250);
+    ui.disableAutoTransition();
+    // Initialising the UI will init the display too.
+    ui.init();
+    display.flipScreenVertically();
+    int remainingTimeBudget = ui.update();
 
-  /* wifiMulti.addAP("Hackerspace", "makehackmodify"); */
-  WiFiManager wifiManager;
-  wifiManager.autoConnect("WaschmaschineAP");
-  WiFiConnected = true;
-  timeClient.begin();
+    WiFiManager wifiManager;
+    wifiManager.autoConnect("WaschmaschineAP");
+    WiFiConnected = true;
+    timeClient.begin();
 
-
-  String telegram = "http://steffiundthomas.net/telegramrelais.php?bot_token=" + String(_BOT_ID) + "&chat_id=" + _CHAT_ID + "&body=test" + timeClient.getFormattedTime();
-  Serial.println(telegram);
-  HTTPClient http;
-  http.begin(telegram);
-  int httpCode = http.GET();
-  // httpCode will be negative on error
-  if(httpCode > 0) {
-      // HTTP header has been send and Server response header has been handled
-      Serial.printf("[HTTP] GET... code: %d\n", httpCode);
-
-      // file found at server
-      if(httpCode == HTTP_CODE_OK) {
-          String payload = http.getString();
-          Serial.println(payload);
-      }
-  } else {
-      Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-  }
-  http.end();
-
-  ads.begin();
+    ads.begin();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+    // put your main code here, to run repeatedly:
 
-  if((millis()-lastUpdate)>updateInterval)
-  {
-    lastUpdate = millis();
-    timeClient.update();
-    if(CE.utcIsDST(timeClient.getEpochTime()))
+    if((millis()-lastUpdate)>updateInterval)
     {
-        timeClient.setTimeOffset(7200);
+        lastUpdate = millis();
+        NTPupdated = timeClient.update();
+        if(CE.utcIsDST(timeClient.getEpochTime()))
+        {
+            timeClient.setTimeOffset(7200);
+        }
+        else
+        {
+            timeClient.setTimeOffset(3600);
+        }
     }
-    else
+    if( !MessageSentBooted && NTPupdated )
     {
-        timeClient.setTimeOffset(3600);
+        sendTelegram("Gebootet um: " + timeClient.getFormattedTime()); 
+        MessageSentBooted = true;
     }
-  }
-  /* if (millis() > Bot_lasttime + Bot_mtbs)  { */
-  /*     int numNewMessages = bot.getUpdates(bot.last_message_recived + 1); */
-  /*     while(numNewMessages) { */
-  /*         Serial.println("got response"); */
-  /*         for(int i=0; i<numNewMessages; i++) { */
-  /*             bot.sendMessage(bot.messages[i].chat_id, bot.messages[i].text, ""); */
-  /*         } */
-  /*         numNewMessages = bot.getUpdates(bot.last_message_recived + 1); */
-  /*     } */
-  /*     Bot_lasttime = millis(); */
-  /* } */
-  if(triggeredJoystick && ((millis()-lastJoystick)>debounceInterval))
-  {
-      triggeredJoystick = false;
-  }
-  if(!triggeredJoystick)
-  {
-      if(getXpos() == rechts)
-          ui.nextFrame();
-      else if(getXpos() == links)
-          ui.previousFrame();
-  }
-  int remainingTimeBudget = ui.update();
+    if(triggeredJoystick && ((millis()-lastJoystick)>debounceInterval))
+    {
+        triggeredJoystick = false;
+    }
+    if(!triggeredJoystick)
+    {
+        if(getXpos() == rechts)
+            ui.nextFrame();
+        else if(getXpos() == links)
+            ui.previousFrame();
+    }
+    int remainingTimeBudget = ui.update();
 
-  if (remainingTimeBudget > 0) {
-      // You can do some work here
-      // Don't do stuff if you are below your
-      // time budget.
-      delay(remainingTimeBudget);
-  }
+    if (remainingTimeBudget > 0) {
+        // You can do some work here
+        // Don't do stuff if you are below your
+        // time budget.
+        delay(remainingTimeBudget);
+    }
 }
 
 int16_t getXaxis()
