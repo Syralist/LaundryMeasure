@@ -47,6 +47,10 @@ Adafruit_ADS1115 ads;  /* Use this for the 16-bit version */
 unsigned int updateInterval = 10000;
 unsigned int lastUpdate = 0;
 
+unsigned int rmsInterval = 5000;
+unsigned int rmsLastUpdate = 0;
+double rmsValue = 0.0;
+
 unsigned int debounceInterval = 200;
 unsigned int lastJoystick = 0;
 bool triggeredJoystick = false;
@@ -58,6 +62,31 @@ bool MessageSentBooted = false;
 // Initialize the OLED display using Wire library
 SSD1306  display(0x3c, D1, D2);
 OLEDDisplayUi ui( &display );
+
+#define OFFSET 8820
+#define SCALE 1.65/OFFSET
+#define VTOA 16.0/1.65
+
+double Volts(int digits)
+{
+    return (double)(digits - OFFSET) * SCALE;
+    /* return (double)(digits) * SCALE; */
+}
+
+double Irms(int channel)
+{
+    double sumSquares;
+    double value;
+    unsigned int samples = 0;
+    unsigned int millisStart = millis();
+    while( (millis()-millisStart) < 200 )
+    {
+        value = Volts(ads.readADC_SingleEnded(channel));
+        sumSquares += value * value;
+        samples++;
+    }
+    return VTOA * sqrt(sumSquares / (double)samples);
+}
 
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -79,14 +108,22 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
     // Demonstrates the 3 included default sizes. The fonts come from SSD1306Fonts.h file
     // Besides the default fonts there will be a program to convert TrueType fonts into this format
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(ArialMT_Plain_10);
-    display->drawString(0 + x, 10 + y, "Arial 10");
+    /* display->setFont(ArialMT_Plain_10); */
+    /* display->drawString(0 + x, 10 + y, "Arial 10"); */
 
     display->setFont(ArialMT_Plain_16);
-    display->drawString(0 + x, 20 + y, "Arial 16");
+    display->drawString(0 + x, 17 + y, "Digits: " + String( ads.readADC_SingleEnded(1) ) );
+    display->drawString(0 + x, 28 + y, "Volts:  " + String( Volts(ads.readADC_SingleEnded(1)) ) );
+    if( (millis() - rmsLastUpdate) > rmsInterval )
+    {
+        rmsValue = Irms(1);
+        Serial.printf("%d Irms: %f\n", millis(), rmsValue);
+        rmsLastUpdate = millis();
+    }
+    display->drawString(0 + x, 39 + y, "Amps:   " + String( rmsValue ) );
 
-    display->setFont(ArialMT_Plain_24);
-    display->drawString(0 + x, 34 + y, "Arial 24");
+    /* display->setFont(ArialMT_Plain_24); */
+    /* display->drawString(0 + x, 34 + y, "Arial 24"); */
 }
 
 String urlencode(String str)
