@@ -56,6 +56,10 @@ unsigned int debounceInterval = 200;
 unsigned int lastJoystick = 0;
 bool triggeredJoystick = false;
 
+unsigned int clickInterval = 200;
+unsigned int lastClick = 0;
+bool triggeredClick = false;
+
 bool WiFiConnected = false;
 bool NTPupdated = false;
 bool MessageSentBooted = false;
@@ -119,6 +123,11 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
 
     /* display->setFont(ArialMT_Plain_24); */
     /* display->drawString(0 + x, 34 + y, "Arial 24"); */
+}
+
+void drawFrame3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+    display->drawXbm(x + 34, y + 14, checkbox_width, checkbox_height, checkbox_bits);
+    display->drawXbm(x + 34, y + 34, checkedbox_width, checkedbox_height, checkedbox_bits);
 }
 
 String urlencode(String str)
@@ -191,10 +200,10 @@ void sendUDPBroadcast(double value)
 
 // This array keeps function pointers to all frames
 // frames are the single views that slide in
-FrameCallback frames[] = { drawFrame1, drawFrame2};
+FrameCallback frames[] = { drawFrame1, drawFrame2, drawFrame3 };
 
 // how many frames are there?
-int frameCount = 2;
+int frameCount = 3;
 
 // Overlays are statically drawn on top of a frame eg. a clock
 OverlayCallback overlays[] = { msOverlay };
@@ -271,9 +280,17 @@ void loop() {
     if(!triggeredJoystick)
     {
         if(getXpos() == rechts)
+        {
             ui.nextFrame();
+            triggeredJoystick = true;
+            lastJoystick = millis();
+        }
         else if(getXpos() == links)
+        {
             ui.previousFrame();
+            triggeredJoystick = true;
+            lastJoystick = millis();
+        }
     }
     if( (millis() - rmsLastUpdate) > rmsInterval )
     {

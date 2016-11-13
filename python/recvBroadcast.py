@@ -13,6 +13,8 @@ sock.bind(('', UDP_PORT))
 # and neither does using the local loopback
 #sock.bind(('127.0.0.1', UDP_PORT))
 
+recording = False
+
 while True:
     try:
         data = sock.recv(2048)
