@@ -41,6 +41,7 @@ time_t utc;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP,"de.pool.ntp.org");
+IPAddress broadcastIp;
 
 Adafruit_ADS1115 ads;  /* Use this for the 16-bit version */
 
@@ -65,7 +66,7 @@ OLEDDisplayUi ui( &display );
 
 #define OFFSET 8820
 #define SCALE 1.65/OFFSET
-#define VTOA 16.0/1.65
+#define VTOA 22.0/1.65
 
 double Volts(int digits)
 {
@@ -114,12 +115,6 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
     display->setFont(ArialMT_Plain_16);
     display->drawString(0 + x, 17 + y, "Digits: " + String( ads.readADC_SingleEnded(1) ) );
     display->drawString(0 + x, 28 + y, "Volts:  " + String( Volts(ads.readADC_SingleEnded(1)) ) );
-    if( (millis() - rmsLastUpdate) > rmsInterval )
-    {
-        rmsValue = Irms(1);
-        Serial.printf("%d Irms: %f\n", millis(), rmsValue);
-        rmsLastUpdate = millis();
-    }
     display->drawString(0 + x, 39 + y, "Amps:   " + String( rmsValue ) );
 
     /* display->setFont(ArialMT_Plain_24); */
@@ -183,6 +178,17 @@ void sendTelegram(String message)
     http.end();
 }
 
+void sendUDPBroadcast(double value)
+{
+    int roundedValue = (int)(value * 1000.0);
+    char buffer[10];
+    sprintf(buffer,"%d",roundedValue);
+    Serial.println(buffer);
+    ntpUDP.beginPacketMulticast(broadcastIp, 42042, WiFi.localIP());
+    ntpUDP.write(buffer);
+    ntpUDP.endPacket();
+}
+
 // This array keeps function pointers to all frames
 // frames are the single views that slide in
 FrameCallback frames[] = { drawFrame1, drawFrame2};
@@ -229,6 +235,9 @@ void setup() {
     WiFiManager wifiManager;
     wifiManager.autoConnect("WaschmaschineAP");
     WiFiConnected = true;
+
+    broadcastIp = ~WiFi.subnetMask() | WiFi.gatewayIP();
+
     timeClient.begin();
 
     ads.begin();
@@ -265,6 +274,15 @@ void loop() {
             ui.nextFrame();
         else if(getXpos() == links)
             ui.previousFrame();
+    }
+    if( (millis() - rmsLastUpdate) > rmsInterval )
+    {
+        rmsValue = Irms(1);
+        Serial.printf("%d Irms: ", millis());
+        Serial.print(rmsValue);
+        Serial.println("");
+        sendUDPBroadcast(rmsValue);
+        rmsLastUpdate = millis();
     }
     int remainingTimeBudget = ui.update();
 
