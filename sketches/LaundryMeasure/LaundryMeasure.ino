@@ -6,6 +6,8 @@
 #include <Time.h>
 #include <Timezone.h>
 
+#include <EEPROM.h>
+
 // Include the UI lib
 #include "OLEDDisplayUi.h"
 // Include custom images
@@ -63,6 +65,8 @@ bool triggeredClick = false;
 bool WiFiConnected = false;
 bool NTPupdated = false;
 bool MessageSentBooted = false;
+
+#define SendValues EEPROM.read(0)==1
 
 // Initialize the OLED display using Wire library
 SSD1306  display(0x3c, D1, D2);
@@ -126,8 +130,28 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
 }
 
 void drawFrame3(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
-    display->drawXbm(x + 34, y + 14, checkbox_width, checkbox_height, checkbox_bits);
-    display->drawXbm(x + 34, y + 34, checkedbox_width, checkedbox_height, checkedbox_bits);
+    if(triggeredClick && ((millis()-lastClick)>clickInterval))
+    {
+        triggeredClick = false;
+    }
+    if(!triggeredClick)
+    {
+        if(digitalRead(D5)==0)
+        {
+            EEPROM.write(0,SendValues?0:1);
+            EEPROM.commit();
+            triggeredClick = true;
+            lastClick = millis();
+        }
+    }
+    if(SendValues)
+    {
+        display->drawXbm(x + 34, y + 34, checkedbox_width, checkedbox_height, checkedbox_bits);
+    }
+    else
+    {
+        display->drawXbm(x + 34, y + 14, checkbox_width, checkbox_height, checkbox_bits);
+    }
 }
 
 String urlencode(String str)
@@ -215,6 +239,9 @@ void setup() {
     Serial.println();
     // put your setup code here, to run once:
 
+    pinMode(D5, INPUT_PULLUP);
+    EEPROM.begin(4);
+
     // The ESP is capable of rendering 60fps in 80Mhz mode
     // but that won't give you much time for anything else
     // run it in 160Mhz mode or just set it to 30 fps
@@ -298,7 +325,10 @@ void loop() {
         Serial.printf("%d Irms: ", millis());
         Serial.print(rmsValue);
         Serial.println("");
-        sendUDPBroadcast(rmsValue);
+        if(SendValues)
+        {
+            sendUDPBroadcast(rmsValue);
+        }
         rmsLastUpdate = millis();
     }
     int remainingTimeBudget = ui.update();
