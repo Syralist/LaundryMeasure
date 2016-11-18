@@ -14,7 +14,7 @@ with open(timestamp+'.csv', 'wb') as csvfile:
     while True:
         try:
             data = sock.recv(2048)
-            value = float(data)/1000.0
+            value = float(data)/1000000.0
             spamwriter.writerow([int(time.time()), value])
             print value
         except KeyboardInterrupt:

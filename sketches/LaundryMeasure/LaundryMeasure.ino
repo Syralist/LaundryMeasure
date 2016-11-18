@@ -53,6 +53,7 @@ unsigned int lastUpdate = 0;
 unsigned int rmsInterval = 5000;
 unsigned int rmsLastUpdate = 0;
 double rmsValue = 0.0;
+double peakValue = 0.0;
 
 unsigned int debounceInterval = 200;
 unsigned int lastJoystick = 0;
@@ -73,8 +74,8 @@ SSD1306  display(0x3c, D1, D2);
 OLEDDisplayUi ui( &display );
 
 #define OFFSET 8820
-#define SCALE 1.65/OFFSET
-#define VTOA 22.0/1.65
+#define SCALE (1.65/OFFSET)
+#define VTOA (22.0/1.65)
 
 double Volts(int digits)
 {
@@ -86,14 +87,21 @@ double Irms(int channel)
 {
     double sumSquares;
     double value;
+    double peak;
     unsigned int samples = 0;
     unsigned int millisStart = millis();
     while( (millis()-millisStart) < 200 )
     {
         value = Volts(ads.readADC_SingleEnded(channel));
-        sumSquares += value * value;
+        value = value * value;
+        if( value > peak )
+        {
+            peak = value;
+        }
+        sumSquares += value;
         samples++;
     }
+    peakValue = sqrt(value);
     return VTOA * sqrt(sumSquares / (double)samples);
 }
 
@@ -123,7 +131,7 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
     display->setFont(ArialMT_Plain_16);
     display->drawString(0 + x, 17 + y, "Digits: " + String( ads.readADC_SingleEnded(1) ) );
     display->drawString(0 + x, 28 + y, "Volts:  " + String( Volts(ads.readADC_SingleEnded(1)) ) );
-    display->drawString(0 + x, 39 + y, "Amps:   " + String( rmsValue ) );
+    display->drawString(0 + x, 39 + y, "Amps:   " + String( rmsValue ) + " " + String(peakValue) );
 
     /* display->setFont(ArialMT_Plain_24); */
     /* display->drawString(0 + x, 34 + y, "Arial 24"); */
@@ -213,7 +221,7 @@ void sendTelegram(String message)
 
 void sendUDPBroadcast(double value)
 {
-    int roundedValue = (int)(value * 1000.0);
+    int roundedValue = (int)(value * 1000000.0);
     char buffer[10];
     sprintf(buffer,"%d",roundedValue);
     Serial.println(buffer);
