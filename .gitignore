@@ -98,3 +98,9 @@ local.properties
 sct-src/
 sct-src-gen/
 telegram.h
+
+# Created by https://www.gitignore.io/api/libreoffice
+
+### LibreOffice ###
+# LibreOffice locks
+.~lock.*#
