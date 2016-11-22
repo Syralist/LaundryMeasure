@@ -56,6 +56,16 @@ unsigned int rmsLastUpdate = 0;
 double rmsValue = 0.0;
 double peakValue = 0.0;
 
+#define NUMMEASURE 24
+double twoMinuteMeasurements[NUMMEASURE];
+double twoMinuteAverage = 0.0;
+double twoMinuteSum = 0.0;
+unsigned int MeasurementCounter = 0;
+bool enoughMeasurements = false;
+bool calibrated = false;
+
+unsigned int globalState = 0;
+
 unsigned int debounceInterval = 200;
 unsigned int lastJoystick = 0;
 bool triggeredJoystick = false;
@@ -77,6 +87,9 @@ OLEDDisplayUi ui( &display );
 #define OFFSET 8820
 #define SCALE (1.65/OFFSET)
 #define VTOA (22.0/1.65)
+
+#define TENTHOUSAND 10000.0
+double calibrationOffset = 3.867123;
 
 double Volts(int digits)
 {
@@ -106,6 +119,71 @@ double Irms(int channel)
     return VTOA * sqrt(sumSquares / (double)samples);
 }
 
+void calcAverage(double value)
+{
+    MeasurementCounter++;
+    if(!enoughMeasurements && MeasurementCounter >= NUMMEASURE)
+    {
+        enoughMeasurements = true;
+    }
+    if(enoughMeasurements)
+    {
+        twoMinuteSum -= twoMinuteMeasurements[MeasurementCounter%NUMMEASURE];
+    }
+    twoMinuteSum += value;
+    twoMinuteAverage = twoMinuteSum / NUMMEASURE;
+    twoMinuteMeasurements[MeasurementCounter%NUMMEASURE] = value;
+}
+
+void updateStatemachine()
+{
+    switch(globalState)
+    {
+        case 0:
+            if( twoMinuteAverage > 1 )
+            {
+                globalState = 1;
+            }
+            break;
+        case 1:
+            if( twoMinuteAverage > 10 )
+            {
+                globalState = 2;
+            }
+            break;
+        case 2:
+            if( twoMinuteAverage > 2000 )
+            {
+                globalState = 3;
+            }
+            break;
+        case 3:
+            if( twoMinuteAverage < 1000 )
+            {
+                globalState = 4;
+            }
+            break;
+        case 4:
+            if( twoMinuteAverage > 1000 )
+            {
+                globalState = 5;
+            }
+            break;
+        case 5:
+            if( twoMinuteAverage < 10 )
+            {
+                globalState = 6;
+            }
+            break;
+        case 6:
+            if( twoMinuteAverage < 1 )
+            {
+                globalState = 0;
+            }
+            break;
+    }
+}
+
 void msOverlay(OLEDDisplay *display, OLEDDisplayUiState* state) {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(ArialMT_Plain_10);
@@ -130,9 +208,12 @@ void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
     /* display->drawString(0 + x, 10 + y, "Arial 10"); */
 
     display->setFont(ArialMT_Plain_16);
-    display->drawString(0 + x, 17 + y, "Digits: " + String( ads.readADC_SingleEnded(1) ) );
-    display->drawString(0 + x, 28 + y, "Volts:  " + String( Volts(ads.readADC_SingleEnded(1)) ) );
-    display->drawString(0 + x, 39 + y, "Amps:   " + String( rmsValue ) + " " + String(peakValue) );
+    display->drawString(0 + x, 13 + y, "Irms: " + String( rmsValue, 6 ) );
+    display->drawString(0 + x, 26 + y, "Iavg: " + String( twoMinuteAverage ) );
+    display->drawString(0 + x, 39 + y, "Mcnt: " + String( MeasurementCounter%NUMMEASURE ) );
+    /* display->drawString(0 + x, 17 + y, "Digits: " + String( ads.readADC_SingleEnded(1) ) ); */
+    /* display->drawString(0 + x, 28 + y, "Volts:  " + String( Volts(ads.readADC_SingleEnded(1)) ) ); */
+    /* display->drawString(0 + x, 39 + y, "Amps:   " + String( rmsValue ) + " " + String(peakValue) ); */
 
     /* display->setFont(ArialMT_Plain_24); */
     /* display->drawString(0 + x, 34 + y, "Arial 24"); */
@@ -352,6 +433,13 @@ void loop() {
     if( (millis() - rmsLastUpdate) > rmsInterval )
     {
         rmsValue = Irms(1);
+        if(!calibrated)
+        {
+            calibrationOffset = rmsValue;
+            calibrated = true;
+        }
+        double measurement = (rmsValue - calibrationOffset) * TENTHOUSAND ;
+        calcAverage(measurement);
         Serial.printf("%d Irms: ", millis());
         Serial.print(rmsValue);
         Serial.println("");
