@@ -65,6 +65,7 @@ bool enoughMeasurements = false;
 bool calibrated = false;
 
 unsigned int globalState = 0;
+String StateStrings[] = {"aus", "nur Display", "Wasser ziehen", "Heizen", "Waschen", "Schleudern", "Fertig"};
 
 unsigned int debounceInterval = 200;
 unsigned int lastJoystick = 0;
@@ -197,7 +198,7 @@ void drawFrame1(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int1
     if(!WiFiConnected)
         display->drawString(0, 20, "Connecting...");
     else
-        display->drawStringMaxWidth(0, 20, 128, String("Herzlich Willkommen!"));
+        display->drawStringMaxWidth(0, 20, 128, "Status: " + StateStrings[globalState]);
 }
 
 void drawFrame2(OLEDDisplay *display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
@@ -436,6 +437,10 @@ void loop() {
         if(!calibrated)
         {
             calibrationOffset = rmsValue;
+            if(SendValues)
+            {
+                sendUDPBroadcast(rmsValue);
+            }
             calibrated = true;
         }
         double measurement = (rmsValue - calibrationOffset) * TENTHOUSAND ;
@@ -445,7 +450,7 @@ void loop() {
         Serial.println("");
         if(SendValues)
         {
-            sendUDPBroadcast(rmsValue);
+            sendUDPBroadcast(measurement);
         }
         rmsLastUpdate = millis();
     }
